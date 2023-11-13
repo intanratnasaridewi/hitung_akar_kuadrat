@@ -20,20 +20,8 @@ db = pymysql.connect(
     
 @app.route('/home')
 def index():
-    try:
-        cursor = db.cursor()
-        cursor.execute("SELECT input, hasil, waktu, jenis FROM logs ORDER BY id DESC") #filter dari data terbaru
-        data = cursor.fetchall()
-        cursor.close()
+    return render_template('index.html')
 
-        # Convert data
-        logs = [{'input': row[0], 'hasil': row[1], 'waktu': row[2], 'jenis': row[3]} for row in data]
-
-        # Passing data ke template
-        return render_template('index.html', logs=logs)
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -54,12 +42,6 @@ def login():
             msg = 'Incorrect username / password !'
     return render_template('login.html', msg = msg)
  
-@app.route('/logout')
-def logout():
-    session.pop('loggedin', None)
-    session.pop('id', None)
-    session.pop('username', None)
-    return redirect(url_for('login'))
 
 @app.route('/register', methods =['GET', 'POST'])
 def register():
@@ -82,24 +64,8 @@ def register():
     elif request.method == 'POST':
         msg = 'Please fill out the form !'
     return render_template('register.html', msg = msg)
-    
-@app.route('/api/ambil-akar-kuadrat', methods=['GET'])
-def ambil_akar_kuadrat():
-    try:
-        cursor = db.cursor()
-        cursor.execute("SELECT input, hasil, waktu, jenis FROM logs")
-        data = cursor.fetchall()
 
-        cursor.close()
-
-        # convert data
-        logs = [{'input': row[0], 'hasil': row[1], 'waktu': row[2], 'jenis': row[3]} for row in data]
-        
-        # passing data json
-        return jsonify({'logs': logs}), 200
     
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 # Menggunakan API
 @app.route('/api/hitung-akar-kuadrat-api', methods=['POST'])
@@ -146,7 +112,7 @@ def hitung_akar_kuadrat_api():
         (angka, akar_tebakan, waktu_penghitungan, jenis, user_id))
         db.commit()
 
-        return jsonify({'input_angka': angka, 'hasil': akar_tebakan, 'waktu_penghitungan': waktu_penghitungan}), 200
+        return jsonify({'input_angka': angka, 'hasil': akar_tebakan, 'waktu_penghitungan': waktu_penghitungan})
     
     except Exception as e:
         if cursor:
@@ -170,19 +136,7 @@ def hitung_akar_kuadrat_plsql():
         cursor = db.cursor()
         cursor.callproc('square_root', (angka, 0, 0, user_id))  # Memanggil stored procedure dengan parameter input, output output, dan output timeoutput
         db.commit()
-
-        # Mengambil ID terbaru dari tabel 
-        cursor.execute("SELECT LAST_INSERT_ID()")
-        result = cursor.fetchone()
-        newest_id = result[0]
-        
-
-        # memanggil hasil dari db
-        cursor.execute("SELECT input, hasil, waktu FROM logs WHERE id = %s", (newest_id,))
-        data = cursor.fetchall()
-        cursor.close()
        
-
         # convert data
         logs = [{'input': row[0],'hasil': row[1], 'waktu-penghitungan': row[2]} for row in data]
         formatted_data = {
