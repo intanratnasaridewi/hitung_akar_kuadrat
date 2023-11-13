@@ -1,14 +1,13 @@
 import pymysql
-import dbm
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import time
 import datetime
-import hashlib
+import secrets
 
 # Membuat server Flask
 app = Flask(__name__)
 
-
+app.secret_key = secrets.token_hex(16)
 # Koneksi ke database MySQL
 db = pymysql.connect(
 	host="localhost",
@@ -17,7 +16,9 @@ db = pymysql.connect(
 	database="db-square-root"
 )
 
-@app.route('/')
+    
+    
+@app.route('/home')
 def index():
     try:
         cursor = db.cursor()
@@ -34,6 +35,53 @@ def index():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/', methods=['GET', 'POST'])
+def login():
+    msg = ''
+    if request.method == 'POST' and 'username' in request.form and 'password' in request.form:
+        username = request.form['username']
+        password = request.form['password']
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM accounts WHERE username = % s AND password = % s', (username, password, ))
+        account = cursor.fetchone()
+        if account:
+            session['loggedin'] = True
+            session['id'] = account[0]  # Assuming 'id' is the first column
+            session['username'] = account[1]  # Assuming 'username' is the second column
+            msg = 'Logged in successfully !'
+            return render_template('index.html', msg = msg)
+        else:
+            msg = 'Incorrect username / password !'
+    return render_template('login.html', msg = msg)
+ 
+@app.route('/logout')
+def logout():
+    session.pop('loggedin', None)
+    session.pop('id', None)
+    session.pop('username', None)
+    return redirect(url_for('login'))
+
+@app.route('/register', methods =['GET', 'POST'])
+def register():
+    msg = ''
+    if request.method == 'POST' and 'username' in request.form and 'password' in request.form:
+        username = request.form['username']
+        password = request.form['password']
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM accounts WHERE username = % s', (username, ))
+        account = cursor.fetchone()
+        if account:
+            msg = 'Account already exists !'
+        elif not username or not password:
+            msg = 'Please fill out the form !'
+        else:
+            cursor = db.cursor()
+            cursor.execute('INSERT INTO accounts VALUES (NULL, % s, % s)', (username, password))
+            db.commit()
+            msg = 'You have successfully registered !'
+    elif request.method == 'POST':
+        msg = 'Please fill out the form !'
+    return render_template('register.html', msg = msg)
     
 @app.route('/api/ambil-akar-kuadrat', methods=['GET'])
 def ambil_akar_kuadrat():
@@ -62,11 +110,8 @@ def hitung_akar_kuadrat_api():
         data = request.get_json()
         angka = data.get('angka')  # Use get() to safely access the 'angka' key
 
-        if angka is None:
-            return jsonify({'error': 'Masukkan angka'}), 400
-
-        if angka < 0:
-            return jsonify({'error': 'Angka harus positif atau nol'}), 400
+        if angka is None or angka <0:
+            return jsonify({'error': 'Angka tidak boleh kosong dan atau kurang dari 0'}), 400
 
      # Your code to calculate the square root
         tebakan = angka / 2
@@ -94,10 +139,11 @@ def hitung_akar_kuadrat_api():
         # Simpan hasil perhitungan ke database MySQL
         cursor = db.cursor()
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        user_id = session.get('id')
 
         # Insert data ke tabel
-        cursor.execute("INSERT INTO logs (input, hasil, waktu, jenis, created_at, updated_at) VALUES (%s, %s, %s, %s, NOW(), NOW())",
-        (angka, akar_tebakan, waktu_penghitungan, jenis))
+        cursor.execute("INSERT INTO logs (input, hasil, waktu, jenis, created_at, updated_at, user_id) VALUES (%s, %s, %s, %s, NOW(), NOW(), %s)",
+        (angka, akar_tebakan, waktu_penghitungan, jenis, user_id))
         db.commit()
 
         return jsonify({'input_angka': angka, 'hasil': akar_tebakan, 'waktu_penghitungan': waktu_penghitungan}), 200
@@ -116,45 +162,63 @@ def hitung_akar_kuadrat_plsql():
         jenis = 'SP-SQL'
         data = request.get_json()
         angka = data['angka']
+        user_id = session.get('id')
+        
+        if angka is None or angka <0:
+            return jsonify({'error': 'Angka tidak boleh kosong dan atau kurang dari 0'}), 400
 
-        if angka is None:
-            return jsonify({'error': 'Masukkan angka'}), 400
-
-        if angka < 0:
-            return jsonify({'error': 'Angka harus positif atau nol'}), 400
-
-        # Menggunakan stored procedure SQL
         cursor = db.cursor()
-        cursor.callproc('square_root', (angka, 0, 0))  # Memanggil stored procedure dengan parameter input, output output, dan output timeoutput
+        cursor.callproc('square_root', (angka, 0, 0, user_id))  # Memanggil stored procedure dengan parameter input, output output, dan output timeoutput
         db.commit()
 
         # Mengambil ID terbaru dari tabel 
         cursor.execute("SELECT LAST_INSERT_ID()")
         result = cursor.fetchone()
         newest_id = result[0]
+        
 
         # memanggil hasil dari db
         cursor.execute("SELECT input, hasil, waktu FROM logs WHERE id = %s", (newest_id,))
         data = cursor.fetchall()
         cursor.close()
+       
 
         # convert data
         logs = [{'input': row[0],'hasil': row[1], 'waktu-penghitungan': row[2]} for row in data]
         formatted_data = {
         "input_angka": logs[0]['input'],  
         "hasil": logs[0]['hasil'],  
-        "waktu_penghitungan": logs[0]['waktu-penghitungan'] 
+        "waktu_penghitungan": logs[0]['waktu-penghitungan'], 
+        "user_id": user_id
         }
 
         return jsonify(formatted_data)
 
 
-        # Mengembalikan hasil dalam bentuk ID terbaru
-        # return jsonify({'id_terbaru': newest_id}), 200
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/log', methods=['GET'])
+def log():
+    try:
+        cursor = db.cursor()
+        cursor.execute("""
+            SELECT logs.input, logs.hasil, logs.waktu, logs.jenis, accounts.username
+            FROM logs
+            JOIN accounts ON logs.user_id = accounts.id
+            ORDER BY logs.id DESC
+        """)
+        data = cursor.fetchall()
+        cursor.close()
+
+        # Convert data
+        logs = [{'input': row[0], 'hasil': row[1], 'waktu': row[2], 'jenis': row[3], 'username': row[4]} for row in data]
+
+        # Passing data to the template
+        return render_template('log.html', logs=logs)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

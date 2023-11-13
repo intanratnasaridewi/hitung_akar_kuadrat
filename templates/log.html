@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #dddddd;
+            text-align: left;
+            padding: 8px;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Logs</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Input</th>
+                <th>Hasil</th>
+                <th>Waktu</th>
+                <th>Jenis</th>
+                <th>Username</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+                <tr>
+                    <td>{{ log['input'] }}</td>
+                    <td>{{ log['hasil'] }}</td>
+                    <td>{{ log['waktu'] }}</td>
+                    <td>{{ log['jenis'] }}</td>
+                    <td>{{ log['username'] }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
